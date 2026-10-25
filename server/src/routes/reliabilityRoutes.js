@@ -259,6 +259,7 @@ const sim = require("../services/riderSimulation");
 const trackingHealer = require("../services/trackingHealer");
 const { isSupervised } = require("../services/chaosRunner");
 const { chaosEnabled, requireChaosAccess } = require("../middleware/chaosGuard");
+// const { requireChaosAccess } = require("../middleware/chaosGuard");
 
 const router = express.Router();
 
@@ -618,5 +619,41 @@ router.get("/chaos-history", async (req, res) => {
     return res.status(500).json({ success: false, message: "Unable to load Chaos Lab history" });
   }
 });
+
+
+
+//changes
+// Manual recovery for rider tracking incidents
+router.post(
+  "/incidents/:id/recover",
+  requireChaosAccess,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.isValidObjectId(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid incident ID",
+        });
+      }
+
+      const result = await trackingHealer.recoverTrackingManually(id);
+
+      return res.json({
+        success: true,
+        message: "Tracking recovery verified successfully",
+        result,
+      });
+    } catch (error) {
+      console.error("Manual recovery failed:", error.message);
+
+      return res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || "Manual recovery failed",
+      });
+    }
+  }
+);
 
 module.exports = router;  
