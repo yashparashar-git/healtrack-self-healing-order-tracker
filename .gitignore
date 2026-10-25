@@ -1,0 +1,18 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+
+# Logs and process-manager state
+logs/
+*.log
+npm-debug.log*
+.pm2/
+
+# Local data backups written by maintenance scripts
+server/backups/
