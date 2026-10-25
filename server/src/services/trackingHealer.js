@@ -1241,39 +1241,60 @@ async function recoverTrackingManually(incidentId) {
     throw error;
   }
 
+  // if (incident.status === "recovered") {
+  //   const error = new Error("This incident is already recovered.");
+  //   error.statusCode = 409;
+  //   throw error;
+  // }
+
+  // if (IN_PROGRESS_STATUSES.includes(incident.status)) {
+  //   const error = new Error("Recovery is already in progress for this incident.");
+  //   error.statusCode = 409;
+  //   throw error;
+  // }
+
+  // if (!["detected", "degraded", "failed"].includes(incident.status)) {
+  //   const error = new Error(
+  //     `Manual recovery is not allowed for incident status: ${incident.status}`
+  //   );
+  //   error.statusCode = 409;
+  //   throw error;
+  // }
+
+  // if (!incident.orderId) {
+  //   const error = new Error("This incident is not linked to an order.");
+  //   error.statusCode = 400;
+  //   throw error;
+  // }
+
+  // const orderId = String(incident.orderId);
+
+  // if (recoveriesInProgress.has(orderId)) {
+  //   const error = new Error("Another recovery is already running for this order.");
+  //   error.statusCode = 409;
+  //   throw error;
+  // }
   if (incident.status === "recovered") {
-    const error = new Error("This incident is already recovered.");
-    error.statusCode = 409;
-    throw error;
-  }
+  const error = new Error("This incident is already recovered.");
+  error.statusCode = 409;
+  throw error;
+}
 
-  if (IN_PROGRESS_STATUSES.includes(incident.status)) {
-    const error = new Error("Recovery is already in progress for this incident.");
-    error.statusCode = 409;
-    throw error;
-  }
+if (["diagnosing", "recovering", "verifying"].includes(incident.status)) {
+  const error = new Error(
+    "Recovery is already in progress for this incident."
+  );
+  error.statusCode = 409;
+  throw error;
+}
 
-  if (!["detected", "degraded", "failed"].includes(incident.status)) {
-    const error = new Error(
-      `Manual recovery is not allowed for incident status: ${incident.status}`
-    );
-    error.statusCode = 409;
-    throw error;
-  }
-
-  if (!incident.orderId) {
-    const error = new Error("This incident is not linked to an order.");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const orderId = String(incident.orderId);
-
-  if (recoveriesInProgress.has(orderId)) {
-    const error = new Error("Another recovery is already running for this order.");
-    error.statusCode = 409;
-    throw error;
-  }
+if (!["detected", "degraded", "failed"].includes(incident.status)) {
+  const error = new Error(
+    `Manual recovery is not allowed for incident status: ${incident.status}`
+  );
+  error.statusCode = 409;
+  throw error;
+}
 
   const order = await Order.findById(orderId);
 

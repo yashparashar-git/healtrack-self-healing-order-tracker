@@ -1232,3 +1232,110 @@ router.get("/:id", async (req, res) => {
 });
 
 module.exports = router;
+
+
+// remaing work
+// router.post("/:id/simulate/start", async (req, res) => {
+//   try {
+//     const orderId = req.params.id;
+
+//     if (!validId(orderId)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid order ID",
+//       });
+//     }
+
+//     const result = await sim.startSimulation(orderId, { reset: true });
+
+//     if (result.alreadyRunning) {
+//       return res.json({
+//         success: true,
+//         message: "Simulation is already running",
+//       });
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "Route-based rider simulation started",
+//       orderId,
+//       updateIntervalSeconds: sim.UPDATE_INTERVAL_MS / 1000,
+//     });
+//   } catch (error) {
+//     if (error.statusCode) {
+//       return res.status(error.statusCode).json({
+//         success: false,
+//         message: error.message,
+//       });
+//     }
+
+//     console.error("Start simulation:", error.message);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Could not start simulation",
+//     });
+//   }
+// });
+
+// // Stop simulated movement.
+// router.post("/:id/simulate/stop", async (req, res) => {
+//   if (!validId(req.params.id)) {
+//     return res.status(400).json({
+//       success: false,
+//       message: "Invalid order ID",
+//     });
+//   }
+
+//   try {
+//     await sim.stopSimulation(req.params.id);
+
+//     return res.json({
+//       success: true,
+//       message: "Simulation stopped",
+//     });
+//   } catch (error) {
+//     console.error("Stop simulation:", error.message);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Could not stop simulation",
+//     });
+//   }
+// });
+
+// // Get one order by ID.
+// router.get("/:id", async (req, res) => {
+//   try {
+//     if (!validId(req.params.id)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid order ID",
+//       });
+//     }
+
+//     const order = await Order.findById(req.params.id);
+
+//     if (!order) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Order not found",
+//       });
+//     }
+
+//     return res.json({
+//       success: true,
+//       order,
+//     });
+//   } catch (error) {
+//     console.error("Get order:", error.message);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Could not fetch order",
+//     });
+//   }
+// });
+
+// module.exports = router;
+
