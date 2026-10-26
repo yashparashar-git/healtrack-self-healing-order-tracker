@@ -129,6 +129,7 @@
 //     </div>
 //   );
 // }
+
 import { useState } from "react";
 import { clockTime, formatMs, statusTone, request } from "../lib/api";
 
@@ -195,23 +196,70 @@ function RecoveryControl({ incident }) {
 
   if (!isTrackingIncident) return null;
 
-  async function handleRecover() {
+  // async function handleRecover() {
+  //   setBusy(true);
+  //   setMessage("");
+
+  //   try {
+  //     const result = await request(
+  //       `/api/reliability/incidents/${incident._id}/recover`,
+  //       { method: "POST" }
+  //     );
+
+  //     setMessage(
+  //       result?.message ||
+  //       "Recovery request completed. Refresh the incident to confirm its status."
+  //     );
+  //     setMessageType("success");
+  //   } catch (error) {
+  //     setMessage(error?.message || "Recovery failed. Check the backend logs.");
+  //     setMessageType("error");
+  //   } finally {
+  //     setBusy(false);
+  //   }
+  // }
+    async function handleRecover() {
     setBusy(true);
     setMessage("");
+    setMessageType("info");
 
     try {
-      const result = await request(
+      const response = await request(
         `/api/reliability/incidents/${incident._id}/recover`,
         { method: "POST" }
       );
 
-      setMessage(
-        result?.message ||
-        "Recovery request completed. Refresh the incident to confirm its status."
+      // A successful HTTP response alone does not prove recovery.
+      const latest = await request(
+        `/api/reliability/incidents/${incident._id}`
       );
-      setMessageType("success");
+
+      const currentIncident = latest?.incident;
+      const verified =
+        currentIncident?.status === "recovered" &&
+        currentIncident?.verification?.passed === true;
+
+      if (verified) {
+        setMessage(
+          currentIncident.verification.detail ||
+            "Recovery completed and verified by the backend."
+        );
+        setMessageType("success");
+      } else {
+        setMessage(
+          currentIncident?.verification?.detail ||
+            response?.message ||
+            `Recovery is not yet verified. Current status: ${
+              currentIncident?.status || "unknown"
+            }. Check the incident timeline before retrying.`
+        );
+        setMessageType("info");
+      }
     } catch (error) {
-      setMessage(error?.message || "Recovery failed. Check the backend logs.");
+      setMessage(
+        error?.message ||
+          "Recovery failed. Check the incident details and backend logs."
+      );
       setMessageType("error");
     } finally {
       setBusy(false);

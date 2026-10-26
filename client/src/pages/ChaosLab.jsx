@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ConsoleNav from "../components/ConsoleNav";
@@ -16,7 +17,7 @@ function useChaosLab() {
   const [error, setError] = useState("");
 
   const [selectedId, setSelectedId] = useState("rider_tracking");
-  const [orderId, setOrderId] = useState("");
+  const [orderId, setOrderId] = useState(() => sessionStorage.getItem("healtrack.selectedOrderId") || "");
   const [params, setParams] = useState({});
   const [currentRunId, setCurrentRunId] = useState("");
   const [currentRun, setCurrentRun] = useState(null);
@@ -83,13 +84,29 @@ function useChaosLab() {
     };
   }, [currentRunId]);
 
+  function updateOrderId(id) {
+    setOrderId(id);
+    if (id) sessionStorage.setItem("healtrack.selectedOrderId", id);
+  }
+
   const scenario = scenarios.find((item) => item.id === selectedId) || null;
   const labBusy = Boolean(status?.activeRun) || currentRun?.status === "RUNNING" || submitting;
 
   // Until the operator picks one, target the newest order whose rider is moving.
-  const defaultTarget = targets.find((target) => target.simulationRunning) || targets[0];
-  const targetId = orderId || (scenario?.requiresOrder === "optional" ? "" : String(defaultTarget?.id || ""));
+  // const defaultTarget = targets.find((target) => target.simulationRunning) || targets[0];
+  // const targetId = orderId || (scenario?.requiresOrder === "optional" ? "" : String(defaultTarget?.id || ""));
+const savedTargetAvailable = targets.some(
+  (target) => String(target.id) === String(orderId)
+);
 
+const defaultTarget =
+  targets.find((target) => target.simulationRunning) || targets[0];
+
+const targetId = savedTargetAvailable
+  ? String(orderId)
+  : scenario?.requiresOrder === "optional"
+    ? ""
+    : String(defaultTarget?.id || "");
   function selectScenario(id) {
     setSelectedId(id);
     setParams({});
@@ -131,18 +148,25 @@ function useChaosLab() {
     }
   }
 
+  // function viewRun(run) {
+  //   setCurrentIncident(null);
+  //   setCurrentRun(run);
+  //   setCurrentRunId(run.runId);
+  //   setSelectedId(run.scenario);
+  //   setParams(run.params || {});
+  //   if (run.orderId) updateOrderId(String(run.orderId));
+  // }
   function viewRun(run) {
-    setCurrentIncident(null);
-    setCurrentRun(run);
-    setCurrentRunId(run.runId);
-    setSelectedId(run.scenario);
-    setParams(run.params || {});
-    if (run.orderId) setOrderId(String(run.orderId));
-  }
+  setCurrentIncident(null);
+  setCurrentRun(run);
+  setCurrentRunId(run.runId);
+  setSelectedId(run.scenario);
+  setParams(run.params || {});
+}
 
   return {
     status, scenarios, targets, runs, apiState, error, notice, setNotice,
-    selectedId, selectScenario, scenario, orderId: targetId, setOrderId, params, setParams,
+    selectedId, selectScenario, scenario, orderId: targetId, setOrderId: updateOrderId, params, setParams,
     currentRun, currentIncident, labBusy, startRun, resetFaults, viewRun,
   };
 }

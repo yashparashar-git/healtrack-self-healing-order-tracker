@@ -597,6 +597,7 @@
 //   collectEvidence,
 //   recoverTrackingManually,
 // };
+
 const Order = require("../models/Order");
 const Incident = require("../models/Incident");
 const {
@@ -1292,6 +1293,19 @@ if (!["detected", "degraded", "failed"].includes(incident.status)) {
   const error = new Error(
     `Manual recovery is not allowed for incident status: ${incident.status}`
   );
+  error.statusCode = 409;
+  throw error;
+}
+if (!incident.orderId) {
+  const error = new Error("This incident is not linked to an order.");
+  error.statusCode = 400;
+  throw error;
+}
+
+const orderId = String(incident.orderId);
+
+if (recoveriesInProgress.has(orderId)) {
+  const error = new Error("Another recovery is already running for this order.");
   error.statusCode = 409;
   throw error;
 }

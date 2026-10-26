@@ -230,6 +230,7 @@
 //   resetChaos,
 // };
 
+
 const Incident = require("../models/Incident");
 
 const COOLDOWN_MS = 10000;

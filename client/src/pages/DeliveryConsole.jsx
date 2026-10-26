@@ -1,3 +1,4 @@
+
 // File location: src/pages/DeliveryConsole.jsx
 // Order delivery console: backend se connected code + poora UI, ek hi file mein.
 // Sections: 1 Backend code (hook)   2 UI pieces   3 Page (sabse neeche)
@@ -78,8 +79,8 @@ function useDeliveryConsole() {
   const [searchingLocations, setSearchingLocations] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const [orderIdInput, setOrderIdInput] = useState("");
-  const [orderId, setOrderId] = useState("");
+  const [orderIdInput, setOrderIdInput] = useState(() => sessionStorage.getItem("healtrack.selectedOrderId") || "");
+  const [orderId, setOrderId] = useState(() => sessionStorage.getItem("healtrack.selectedOrderId") || "");
   const [order, setOrder] = useState(null);
 
   const [loading, setLoading] = useState(false);
@@ -96,6 +97,16 @@ function useDeliveryConsole() {
   const failures = useRef(0);
   const currentId = useRef("");
   const inFlight = useRef(false);
+
+  // Restore the selected order after navigating between Delivery Console,
+  // Chaos Lab and the Self-Healing Portal.
+  useEffect(() => {
+    const savedId = sessionStorage.getItem("healtrack.selectedOrderId") || "";
+    if (!ID_PATTERN.test(savedId)) return;
+    currentId.current = savedId;
+    setOrderIdInput((value) => value || savedId);
+    setOrderId((value) => value || savedId);
+  }, []);
 
   const loadTracking = useCallback(async (id, showError = false) => {
     if (!id) return;
@@ -142,6 +153,18 @@ function useDeliveryConsole() {
     };
   }, []);
 
+  // orderid usestate
+  useEffect(() => {
+  if (!orderId) return;
+
+  sessionStorage.setItem("healtrack.selectedOrderId", orderId);
+
+  currentId.current = orderId;
+  setOrderIdInput(orderId);
+
+  loadTracking(orderId);
+}, [orderId]);
+
   // Address search (typing rukne ke 600ms baad)
   const canSearch = showSuggestions && !selectedLocation && deliveryAddress.trim().length >= 3;
   useEffect(() => {
@@ -187,6 +210,40 @@ function useDeliveryConsole() {
     const timer = setInterval(tick, 3000);
     return () => clearInterval(timer);
   }, [orderId, loadTracking]);
+
+  const [latestReliabilityIncident, setLatestReliabilityIncident] = useState(null);
+
+  // Poll persisted incidents so Chaos Lab / Self-Healing Portal outcomes are
+  // visible when the operator returns to this console.
+  useEffect(() => {
+    let active = true;
+    const refreshIncidents = async () => {
+      try {
+        const data = await request(`${API_BASE}/api/reliability/incidents?limit=20`);
+        if (!active) return;
+        const incidents = Array.isArray(data.incidents) ? data.incidents : [];
+        const selectedId = orderId || sessionStorage.getItem("healtrack.selectedOrderId") || "";
+        const relevant = incidents.filter((incident) => {
+          const incidentOrderId = incident.orderId?._id || incident.orderId;
+          const isOrderIncident = selectedId && incidentOrderId && String(incidentOrderId) === String(selectedId);
+          const isGlobalIncident = !incidentOrderId;
+          const detectedAt = new Date(incident.detectedAt || incident.createdAt || 0).getTime();
+          // Keep global incidents visible for 30 minutes, avoiding stale old notices.
+          return isOrderIncident || (isGlobalIncident && Date.now() - detectedAt < 30 * 60 * 1000);
+        });
+        relevant.sort((a, b) => new Date(b.updatedAt || b.detectedAt || b.createdAt || 0) - new Date(a.updatedAt || a.detectedAt || a.createdAt || 0));
+        setLatestReliabilityIncident(relevant[0] || null);
+      } catch {
+        // Incident polling is supplemental; don't hide the order if it fails.
+      }
+    };
+    refreshIncidents();
+    const timer = setInterval(refreshIncidents, 3000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [orderId]);
 
   // Location ki umr client par badhti rehti hai, taaki backend band hone par "fresh" na dikhe
   const hasOrder = Boolean(order);
@@ -245,6 +302,7 @@ function useDeliveryConsole() {
       const id = createdOrder._id;
 
       currentId.current = id;
+      sessionStorage.setItem("healtrack.selectedOrderId", id);
       failures.current = 0;
       setOrderIdInput(id);
       setOrderId(id);
@@ -285,6 +343,7 @@ function useDeliveryConsole() {
     }
 
     currentId.current = id;
+    sessionStorage.setItem("healtrack.selectedOrderId", id);
     setOrderId(id);
     await loadTracking(id, true);
   }
@@ -377,6 +436,7 @@ function useDeliveryConsole() {
     freshness, locationAge, hasLocation, latitude, longitude,
     // status
     apiState, apiLabel, apiOnline, apiChecked, connection, message, error,
+    latestReliabilityIncident,
   };
 }
 
@@ -411,6 +471,127 @@ function TrackingNotice({ order }) {
     );
   }
   return null;
+}
+
+// function ReliabilityIncidentNotice({ incident }) {
+//   if (!incident) return null;
+
+//   const status = String(incident.status || "detected").toLowerCase();
+//   const title = incident.incidentType || incident.service || "System reliability incident";
+//   const details = incident.diagnosis || incident.message || incident.description || "";
+
+//   if (status === "recovered") {
+//     return (
+//       <div className="cs-notice cs-notice--ok" role="status">
+//         <strong>Recovery verified:</strong> {title} is recovered. {details ? `${details} ` : ""}
+//         {incident.recoveredAt ? `Verified at ${new Date(incident.recoveredAt).toLocaleTimeString()}.` : "The latest incident status is recovered."}
+//       </div>
+//     );
+//   }
+
+//   if (status === "degraded" || status === "failed") {
+//     return (
+//       <div className="cs-notice cs-notice--warn" role="status">
+//         <strong>{status === "degraded" ? "Service degraded:" : "Recovery failed:"}</strong> {title}. {details || "The incident remains unresolved; the order is kept visible and its last known data is retained."}
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="cs-notice cs-notice--warn" role="status">
+//       <strong>Failure detected:</strong> {title} — status: {status}. {details || "HealTrack is tracking this incident. Your selected order remains loaded."}
+//       {" "}<Link className="cs-link" to={`/healing?incident=${incident._id}`}>View / recover incident →</Link>
+//     </div>
+//   );
+// }
+
+// new reliasblityincidentnotice
+function ReliabilityIncidentNotice({ incident }) {
+  if (!incident) return null;
+
+  const status = String(incident.status || "detected").toLowerCase();
+  const title = incident.incidentType || incident.service || "System reliability incident";
+  const details =
+    incident.diagnosis ||
+    incident.message ||
+    incident.description ||
+    "";
+
+  const incidentLink = incident._id
+    ? `/healing?incident=${incident._id}`
+    : "/healing";
+
+  if (status === "recovered") {
+    const verificationPassed = incident.verification?.passed;
+
+    if (verificationPassed === false) {
+      return (
+        <div className="cs-notice cs-notice--warn" role="status">
+          <strong>Recovery not verified:</strong> {title}. The incident is marked
+          recovered, but its verification result failed. Check the Self-Healing Portal.
+          <Link className="cs-link" to={incidentLink}>
+            {" "}Review incident →
+          </Link>
+        </div>
+      );
+    }
+
+    return (
+      <div className="cs-notice cs-notice--ok" role="status">
+        <strong>Recovery reported:</strong> {title}.{" "}
+        {details ? `${details} ` : ""}
+        {incident.recoveredAt
+          ? `Reported at ${new Date(incident.recoveredAt).toLocaleTimeString()}.`
+          : "The backend reports that this incident is recovered."}
+        <Link className="cs-link" to={incidentLink}>
+          {" "}View incident →
+        </Link>
+      </div>
+    );
+  }
+
+  if (status === "degraded" || status === "failed") {
+    return (
+      <div className="cs-notice cs-notice--warn" role="status">
+        <strong>{status === "degraded" ? "Service degraded:" : "Recovery failed:"}</strong>{" "}
+        {title}.{" "}
+        {details ||
+          "The incident remains unresolved. The selected order and its last known data should remain visible."}
+        <Link className="cs-link" to={incidentLink}>
+          {" "}Review / recover →
+        </Link>
+      </div>
+    );
+  }
+
+  if (["detected", "diagnosing", "recovering", "verifying"].includes(status)) {
+    const labels = {
+      detected: "Failure detected",
+      diagnosing: "Diagnosis in progress",
+      recovering: "Recovery in progress",
+      verifying: "Verifying recovery",
+    };
+
+    return (
+      <div className="cs-notice cs-notice--warn" role="status">
+        <strong>{labels[status]}:</strong> {title}.{" "}
+        {details || "Your selected order remains loaded while HealTrack tracks the incident."}
+        <Link className="cs-link" to={incidentLink}>
+          {" "}Open Self-Healing Portal →
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cs-notice cs-notice--warn" role="status">
+      <strong>Incident status: {status}</strong> — {title}.{" "}
+      Check the incident details before assuming recovery succeeded.
+      <Link className="cs-link" to={incidentLink}>
+        {" "}View incident →
+      </Link>
+    </div>
+  );
 }
 
 function Notices({ connection, error, message }) {
@@ -732,6 +913,7 @@ export default function DeliveryConsole() {
 
         <Notices connection={c.connection} error={c.error} message={c.message} />
         <TrackingNotice order={c.order} />
+        <ReliabilityIncidentNotice incident={c.latestReliabilityIncident} />
         <OrderSummary {...c} />
 
         <div className="cs-grid">
