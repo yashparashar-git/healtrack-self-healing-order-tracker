@@ -636,6 +636,29 @@ async function findActiveIncident(cacheKey) {
 async function recordRoutingEvent(event, { cacheKey, startedAt, error, attempts, route }) {
   try {
     let incident = await findActiveIncident(cacheKey);
+    if (event === "service_restored") {
+  const incident = await findActiveIncident(cacheKey);
+
+  if (incident) {
+    await transition(incident._id, "degraded", {
+      note: "Routing service is responding again. Manual recovery and verification are still required.",
+      action: {
+        name: "Automatic service restoration",
+        detail: "OSRM responded successfully. Incident remains unresolved until manual recovery verification.",
+        success: true,
+      },
+      evidence: {
+        serviceRestored: true,
+        manualRecoveryRequired: true,
+      },
+    });
+  }
+
+  return;
+}
+
+
+
 
     if (event === "recovered") {
       if (!incident) return null;
@@ -745,7 +768,11 @@ function makeFallback(cachedRoute, attempts, startedAt, message) {
   };
 }
 
-async function getRoadRouteWithHealing(origin, destination) {
+async function getRoadRouteWithHealing(
+  origin,
+  destination,
+  { manualRecovery = false } = {}
+) {
   validateCoordinates(origin, "origin");
   validateCoordinates(destination, "destination");
 
@@ -820,7 +847,12 @@ async function getRoadRouteWithHealing(origin, destination) {
         if (isProbe) routingState.lastProbe = { at: new Date().toISOString(), ok: true };
         cacheRoute(cacheKey, route);
 
-        await recordRoutingEvent("recovered", { cacheKey, startedAt, route });
+        // await recordRoutingEvent("recovered", { cacheKey, startedAt, route });
+        await recordRoutingEvent("service_restored", {
+  cacheKey,
+  startedAt,
+  route,
+});
 
         return {
           ...route,

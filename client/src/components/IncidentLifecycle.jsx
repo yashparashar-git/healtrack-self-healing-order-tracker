@@ -175,96 +175,95 @@ function Icon({ name }) {
   return <svg {...props}><path d="M20 7v5h-5" /><path d="M4.9 9A7.5 7.5 0 0 1 17.6 6L20 12" /><path d="M4 17v-5h5" /><path d="M19.1 15A7.5 7.5 0 0 1 6.4 18L4 12" /></svg>;
 }
 
-/* Manual recovery control for rider-tracking incidents */
+
+/* Manual recovery control */
 function RecoveryControl({ incident }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("info");
+  const [currentIncident, setCurrentIncident] = useState(incident);
 
-  const isTrackingIncident =
-    incident.incidentType === "rider_tracking_stale";
+  const supportedTypes = [
+    "rider_tracking_stale",
+    "external_route_service_failure",
+  ];
+
+  const activeIncident = currentIncident?._id === incident._id
+    ? currentIncident
+    : incident;
+
+  const isSupported = supportedTypes.includes(activeIncident.incidentType);
 
   const inProgress = [
     "diagnosing",
     "recovering",
     "verifying",
-  ].includes(incident.status);
+  ].includes(activeIncident.status);
 
   const canRecover =
-    isTrackingIncident &&
-    RECOVERABLE.includes(incident.status);
+    isSupported &&
+    RECOVERABLE.includes(activeIncident.status);
 
-  if (!isTrackingIncident) return null;
+  async function handleRecover() {
+    if (!canRecover || busy) return;
 
-  // async function handleRecover() {
-  //   setBusy(true);
-  //   setMessage("");
-
-  //   try {
-  //     const result = await request(
-  //       `/api/reliability/incidents/${incident._id}/recover`,
-  //       { method: "POST" }
-  //     );
-
-  //     setMessage(
-  //       result?.message ||
-  //       "Recovery request completed. Refresh the incident to confirm its status."
-  //     );
-  //     setMessageType("success");
-  //   } catch (error) {
-  //     setMessage(error?.message || "Recovery failed. Check the backend logs.");
-  //     setMessageType("error");
-  //   } finally {
-  //     setBusy(false);
-  //   }
-  // }
-    async function handleRecover() {
     setBusy(true);
     setMessage("");
     setMessageType("info");
 
     try {
-      const response = await request(
-        `/api/reliability/incidents/${incident._id}/recover`,
+      const result = await request(
+        `/api/reliability/incidents/${activeIncident._id}/recover`,
         { method: "POST" }
       );
 
-      // A successful HTTP response alone does not prove recovery.
-      const latest = await request(
-        `/api/reliability/incidents/${incident._id}`
-      );
+      // Check the recovery endpoint's response first.
+      if (result?.success === false) {
+        throw new Error(result.message || "Recovery was not successful.");
+      }
 
-      const currentIncident = latest?.incident;
+      /*
+       * Do not assume a GET /incidents/:id endpoint exists.
+       * The POST response must include the saved incident to confirm
+       * recovery; otherwise, report that verification is still needed.
+       */
+      const savedIncident =
+        result?.incident ||
+        result?.data?.incident;
+
+      if (savedIncident?._id) {
+        setCurrentIncident(savedIncident);
+      }
+
       const verified =
-        currentIncident?.status === "recovered" &&
-        currentIncident?.verification?.passed === true;
+        savedIncident?.status === "recovered" &&
+        savedIncident?.verification?.passed === true;
 
       if (verified) {
         setMessage(
-          currentIncident.verification.detail ||
+          savedIncident.verification.detail ||
             "Recovery completed and verified by the backend."
         );
         setMessageType("success");
       } else {
         setMessage(
-          currentIncident?.verification?.detail ||
-            response?.message ||
-            `Recovery is not yet verified. Current status: ${
-              currentIncident?.status || "unknown"
-            }. Check the incident timeline before retrying.`
+          result?.message ||
+            "Recovery request processed, but the saved incident's verification has not been confirmed. Check the incident timeline."
         );
         setMessageType("info");
       }
     } catch (error) {
-      setMessage(
-        error?.message ||
-          "Recovery failed. Check the incident details and backend logs."
-      );
+      setMessage(error?.message || "Recovery request failed.");
       setMessageType("error");
     } finally {
       setBusy(false);
     }
   }
+
+  if (!isSupported) return null;
+
+  const isTracking =
+    activeIncident.incidentType === "rider_tracking_stale";
 
   return (
     <section className="hl-recovery">
@@ -275,10 +274,13 @@ function RecoveryControl({ incident }) {
 
         <div>
           <p className="hl-eyebrow">Operator action</p>
-          <h3>Tracking recovery</h3>
+          <h3>
+            {isTracking ? "Tracking recovery" : "Routing recovery"}
+          </h3>
           <p>
-            Restart the rider worker and verify that fresh, valid location
-            data is written before recovery is accepted.
+            {isTracking
+              ? "Restart the rider worker and verify that fresh, valid location data is written."
+              : "Retry the external route service and verify that a valid, non-degraded route is returned."}
           </p>
         </div>
       </div>
@@ -299,9 +301,10 @@ function RecoveryControl({ incident }) {
           ? "Recovering..."
           : inProgress
           ? "Recovery in progress"
-          : incident.status === "recovered"
-          ? "Recovered"
-          : "Recover tracking"}
+          : activeIncident.status === "recovered" &&
+            activeIncident.verification?.passed === true
+          ? "Recovered and verified"
+          : "Retry recovery"}
       </button>
 
       {message && (
@@ -315,13 +318,15 @@ function RecoveryControl({ incident }) {
         </div>
       )}
 
-      {incident.status === "recovered" &&
-        incident.verification?.passed === true && (
+      {activeIncident.status === "recovered" &&
+        activeIncident.verification?.passed === true && (
           <div className="hl-recovery__message is-success">
             <Icon name="check" />
             <span>
-              Recovery verified by the backend.
-              Fresh tracking data was confirmed.
+              Backend verification passed.
+              {" "}
+              {activeIncident.verification.detail ||
+                "Recovery has been confirmed."}
             </span>
           </div>
         )}
@@ -472,6 +477,7 @@ function RecoveryControl({ incident }) {
     </section>
   );
 }
+
 
 export function LifecycleStrip({ incident }) {
   const timeline = incident.timeline || [];
